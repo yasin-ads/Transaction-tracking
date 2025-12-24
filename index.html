@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TRON Transaction Delay Simulation</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Courier New', monospace;
+        }
+        
+        body {
+            background-color: #0a0a0a;
+            color: #00ff00;
+            padding: 20px;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+        
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            border: 1px solid #333;
+            background-color: #111;
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #00ff00;
+        }
+        
+        .transaction-details {
+            background-color: #1a1a1a;
+            padding: 15px;
+            margin-bottom: 20px;
+            border-left: 3px solid #ff9900;
+        }
+        
+        .progress-container {
+            margin: 30px 0;
+        }
+        
+        .progress-text {
+            font-family: monospace;
+            font-size: 1.1em;
+            margin: 10px 0;
+            color: #00ff00;
+        }
+        
+        .status-message {
+            color: #00aaff;
+            margin: 10px 0;
+            padding: 5px;
+        }
+        
+        .warning {
+            color: #ff9900;
+            background-color: #222;
+            padding: 10px;
+            margin: 10px 0;
+            border-left: 3px solid #ff9900;
+        }
+        
+        .info {
+            color: #00aaff;
+            background-color: #1a1a2a;
+            padding: 10px;
+            margin: 10px 0;
+            border-left: 3px solid #00aaff;
+        }
+        
+        .queue-list {
+            margin: 20px 0;
+            padding: 10px;
+            background-color: #1a1a1a;
+        }
+        
+        .queue-item {
+            margin: 5px 0;
+            padding: 5px;
+            border-bottom: 1px solid #333;
+        }
+        
+        .time-stamp {
+            color: #666;
+            font-size: 0.9em;
+            text-align: center;
+            margin-top: 20px;
+        }
+        
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+        
+        .blink {
+            animation: blink 1s infinite;
+        }
+        
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>TRON TRANSACTION</h1>
+            <p>Transaction ID: 0xfd682fec27f3e63148839d47bb777d25cf2dd5ded002bf7e7e263fb366b5c1f0</p>
+        </div>
+        
+        <div class="transaction-details">
+            <p>Recipient: TURi4jb9S4...+PJTDDshs</p>
+            <p>Amount: 112,548 USD</p>
+            <p>Network: TRON Network</p>
+            <p>Network Fee: 1,233 TBX ($148.00)</p>
+        </div>
+        
+        <div id="simulation-output">
+            <!-- Simulation output will appear here -->
+        </div>
+        
+        <div class="progress-container">
+            <div id="progress-text" class="progress-text">[..............................................] 0%</div>
+            <div id="status-message" class="status-message">Initializing...</div>
+        </div>
+        
+        <div id="queue-output" class="queue-list hidden">
+            <h3>Queue Position Updates:</h3>
+            <!-- Queue updates will appear here -->
+        </div>
+        
+        <div class="time-stamp" id="time-stamp">
+            Last update: <span id="last-update">--:--:--</span>
+        </div>
+    </div>
+
+    <script>
+        // ==== CONFIGURATION ====
+        const START_PERCENT = 66; // Start at 66%
+        const END_TIME = new Date();
+        END_TIME.setDate(END_TIME.getDate() + 1);
+        END_TIME.setHours(16, 0, 0, 0); // Tomorrow at 4:00 PM
+        
+        // ==== STATE MANAGEMENT ====
+        const STORAGE_KEY = 'tron_simulation_state';
+        
+        function saveState() {
+            const state = {
+                progress: currentProgress,
+                stepIndex: currentStepIndex,
+                queueShown: queueShown,
+                maintenanceShown: maintenanceShown,
+                delayNoticeShown: delayNoticeShown,
+                lastUpdate: new Date().toISOString()
+            };
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+        }
+        
+        function loadState() {
+            const saved = localStorage.getItem(STORAGE_KEY);
+            if (!saved) return null;
+            
+            try {
+                return JSON.parse(saved);
+            } catch (e) {
+                return null;
+            }
+        }
+        
+        // ==== DOM ELEMENTS ====
+        const simulationOutput = document.getElementById('simulation-output');
+        const queueOutput = document.getElementById('queue-output');
+        const progressText = document.getElementById('progress-text');
+        const statusMessage = document.getElementById('status-message');
+        const lastUpdate = document.getElementById('last-update');
+        
+        // ==== INITIAL STATE ====
+        let currentProgress = START_PERCENT;
+        let currentStepIndex = 0;
+        let queueShown = false;
+        let maintenanceShown = false;
+        let delayNoticeShown = false;
+        
+        // ==== SIMULATION STEPS ====
+        const steps = [
+            { percent: 66, message: 'Processing at reduced speed' },
+            { percent: 75, message: 'Resuming after maintenance' },
+            { percent: 85, message: 'Final verification' },
+            { percent: 95, message: 'Final processing stage' }
+        ];
+        
+        // ==== HELPER FUNCTIONS ====
+        function createProgressBar(percent) {
+            const totalWidth = 50;
+            const filled = Math.floor(percent / 100 * totalWidth);
+            const empty = totalWidth - filled;
+            
+            return '[' + '#'.repeat(filled) + '.'.repeat(empty) + '] ' + percent + '%';
+        }
+        
+        function updateDisplay() {
+            // Update progress bar text
+            const currentStep = steps.find(step => step.percent === currentProgress);
+            if (currentStep) {
+                progressText.textContent = createProgressBar(currentProgress) + ' - ' + currentStep.message;
+                statusMessage.textContent = currentStep.message;
+            }
+            
+            // Update timestamp
+            const now = new Date();
+            lastUpdate.textContent = now.toLocaleTimeString();
+            
+            // Save state
+            saveState();
+        }
+        
+        function addStatusMessage(text, type = 'normal') {
+            const div = document.createElement('div');
+            
+            if (type === 'warning') {
+                div.className = 'warning blink';
+            } else if (type === 'info') {
+                div.className = 'info';
+            } else {
+                div.className = 'status-message';
+            }
+            
+            div.textContent = text;
+            simulationOutput.appendChild(div);
+            div.scrollIntoView({ behavior: 'smooth', block: 'end' });
+            
+            // Save that we've shown this message
+            saveState();
+        }
+        
+        function showQueuePositions() {
+            if (queueShown) return;
+            
+            queueOutput.classList.remove('hidden');
+            const positions = [12487, 8421, 5234, 3156, 1892, 987, 456, 123];
+            
+            positions.forEach((position, index) => {
+                setTimeout(() => {
+                    const div = document.createElement('div');
+                    div.className = 'queue-item';
+                    div.textContent = `Position: #${position}`;
+                    queueOutput.appendChild(div);
+                }, index * 200);
+            });
+            
+            queueShown = true;
+            saveState();
+        }
+        
+        function showMaintenance() {
+            if (maintenanceShown) return;
+            
+            addStatusMessage('NETWORK MAINTENANCE', 'warning');
+            addStatusMessage('Processing paused for maintenance', 'info');
+            
+            // Create waiting animation
+            const waitingDiv = document.createElement('div');
+            waitingDiv.className = 'info';
+            waitingDiv.id = 'waiting-animation';
+            waitingDiv.textContent = 'Waiting';
+            simulationOutput.appendChild(waitingDiv);
+            
+            // Animate dots
+            let dots = 0;
+            const dotInterval = setInterval(() => {
+                dots = (dots + 1) % 4;
+                waitingDiv.textContent = 'Waiting' + '.'.repeat(dots);
+            }, 500);
+            
+            // Stop after 3 seconds
+            setTimeout(() => {
+                clearInterval(dotInterval);
+                waitingDiv.textContent = 'DONE';
+                maintenanceShown = true;
+                saveState();
+            }, 3000);
+        }
+        
+        function showDelayNotice() {
+            if (delayNoticeShown) return;
+            
+            addStatusMessage('EXTENDED DELAY NOTICE', 'warning');
+            addStatusMessage('Transaction will be delayed until tomorrow evening', 'warning');
+            delayNoticeShown = true;
+            saveState();
+        }
+        
+        // ==== PROGRESS CALCULATION ====
+        function calculateCurrentProgress() {
+            const now = new Date();
+            const start = new Date();
+            start.setHours(start.getHours() - 1); // Assume started 1 hour ago
+            
+            const totalTime = END_TIME - start;
+            const elapsed = now - start;
+            
+            let progress = (elapsed / totalTime) * 100;
+            
+            // Cap at 95% until end time
+            progress = Math.min(95, progress);
+            
+            // Add some realistic variation
+            const variation = (Math.random() * 0.5) - 0.25;
+            progress += variation;
+            
+            // Round to nearest step percent
+            const stepPercents = steps.map(s => s.percent);
+            for (let i = 0; i < stepPercents.length; i++) {
+                if (progress >= stepPercents[i]) {
+                    currentProgress = stepPercents[i];
+                    currentStepIndex = i;
+                }
+            }
+            
+            return currentProgress;
+        }
+        
+        // ==== EVENT TRIGGERS ====
+        function checkEvents() {
+            if (currentProgress >= 66 && !queueShown) {
+                showQueuePositions();
+            }
+            
+            if (currentProgress >= 70 && !maintenanceShown) {
+                showMaintenance();
+            }
+            
+            if (currentProgress >= 90 && !delayNoticeShown) {
+                showDelayNotice();
+            }
+            
+            // Check if we should show peak hours message
+            if (currentProgress >= 66 && currentProgress < 70) {
+                const peakMessage = document.querySelector('.peak-hours');
+                if (!peakMessage) {
+                    addStatusMessage('PEAK HOURS DETECTED', 'warning');
+                    addStatusMessage('Processing speed reduced by 60%', 'warning');
+                }
+            }
+        }
+        
+        // ==== INITIALIZATION ====
+        function initializeSimulation() {
+            // Load saved state
+            const savedState = loadState();
+            if (savedState) {
+                currentProgress = savedState.progress || START_PERCENT;
+                currentStepIndex = savedState.stepIndex || 0;
+                queueShown = savedState.queueShown || false;
+                maintenanceShown = savedState.maintenanceShown || false;
+                delayNoticeShown = savedState.delayNoticeShown || false;
+                
+                // Restore queue display if it was shown
+                if (queueShown) {
+                    queueOutput.classList.remove('hidden');
+                    showQueuePositions();
+                }
+            }
+            
+            // Set initial display
+            updateDisplay();
+            
+            // Check if we need to show any events
+            setTimeout(() => {
+                checkEvents();
+            }, 1000);
+            
+            // Start auto-update
+            setInterval(() => {
+                // Recalculate progress based on real time
+                calculateCurrentProgress();
+                updateDisplay();
+                checkEvents();
+            }, 30000); // Update every 30 seconds
+            
+            // Also update every 5 seconds for smooth progress
+            setInterval(() => {
+                lastUpdate.textContent = new Date().toLocaleTimeString();
+            }, 5000);
+        }
+        
+        // ==== START SIMULATION ====
+        window.onload = initializeSimulation;
+        
+        // ==== PREVENT REFRESH RESET ====
+        window.onbeforeunload = saveState;
+        
+        // ==== AUTO-COMPLETE AT 4 PM ====
+        function checkCompletion() {
+            const now = new Date();
+            if (now >= END_TIME) {
+                // Final completion
+                addStatusMessage('TRANSACTION COMPLETED SUCCESSFULLY', 'info');
+                progressText.textContent = '[##################################################] 100% - Transaction Completed';
+                statusMessage.textContent = 'Completed at 4:00 PM';
+                
+                // Clear intervals
+                const intervalId = window.setInterval(function(){}, 9999);
+                for (let i = 0; i < intervalId; i++) {
+                    window.clearInterval(i);
+                }
+            }
+        }
+        
+        // Check completion every minute
+        setInterval(checkCompletion, 60000);
+    </script>
+</body>
+</html>
